@@ -1,0 +1,22 @@
+## .gitignore
+
+# .NET build outputs
+bin/
+obj/
+*.user
+*.suo
+.vs/
+.vscode/
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Node (if added later)
+node_modules/
+
+# Secrets
+*.env
+appsettings.Development.json

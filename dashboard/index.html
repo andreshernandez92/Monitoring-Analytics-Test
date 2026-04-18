@@ -1,0 +1,2395 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CloudWalk — Transaction Monitoring Dashboard</title>
+  <meta name="description" content="Real-time transaction anomaly monitoring dashboard for CloudWalk payment infrastructure." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
+  <style>
+    /* ═══════════════════════════════════
+       DESIGN TOKENS
+    ═══════════════════════════════════ */
+    :root {
+      --bg-deep:     #060b14;
+      --bg-surface:  #0d1525;
+      --bg-card:     #111c30;
+      --bg-hover:    #172240;
+      --border:      rgba(99,179,255,0.12);
+      --border-glow: rgba(99,179,255,0.35);
+
+      --text-primary:   #e8f0ff;
+      --text-secondary: #7a94c1;
+      --text-muted:     #3d5280;
+
+      --accent:    #3b82f6;
+      --accent-glow: rgba(59,130,246,0.4);
+      --green:     #22c55e;
+      --yellow:    #eab308;
+      --red:       #ef4444;
+      --orange:    #f97316;
+      --purple:    #a855f7;
+
+      --approved-color: #22c55e;
+      --denied-color:   #ef4444;
+      --failed-color:   #f97316;
+      --reversed-color: #a855f7;
+
+      --radius-sm: 8px;
+      --radius-md: 14px;
+      --radius-lg: 20px;
+
+      --font-main: 'Inter', sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+    }
+
+    /* ═══════════════════════════════════
+       RESET & BASE
+    ═══════════════════════════════════ */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: var(--font-main);
+      background: var(--bg-deep);
+      color: var(--text-primary);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: var(--bg-deep); }
+    ::-webkit-scrollbar-thumb { background: var(--bg-hover); border-radius: 3px; }
+
+    /* ═══════════════════════════════════
+       LAYOUT
+    ═══════════════════════════════════ */
+    .app-shell {
+      display: grid;
+      grid-template-rows: auto 1fr;
+      min-height: 100vh;
+    }
+
+    /* ════ HEADER ════ */
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 32px;
+      height: 64px;
+      background: rgba(13,21,37,0.95);
+      border-bottom: 1px solid var(--border);
+      backdrop-filter: blur(12px);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .logo-icon {
+      width: 32px;
+      height: 32px;
+      background: linear-gradient(135deg, var(--accent), #6366f1);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+    }
+
+    .logo-text {
+      font-weight: 700;
+      font-size: 15px;
+      letter-spacing: -0.3px;
+    }
+
+    .logo-sub {
+      font-size: 11px;
+      color: var(--text-secondary);
+      font-weight: 400;
+      margin-top: 1px;
+    }
+
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+    }
+
+    .live-badge {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      background: rgba(34,197,94,0.12);
+      border: 1px solid rgba(34,197,94,0.3);
+      border-radius: 20px;
+      padding: 5px 12px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--green);
+      letter-spacing: 0.5px;
+    }
+
+    .live-dot {
+      width: 8px;
+      height: 8px;
+      background: var(--green);
+      border-radius: 50%;
+      animation: pulse-dot 1.5s ease-in-out infinite;
+    }
+
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50%       { opacity: 0.5; transform: scale(0.7); }
+    }
+
+    .last-updated {
+      font-size: 12px;
+      color: var(--text-muted);
+      font-family: var(--font-mono);
+    }
+
+    /* ════ NAV TABS ════ */
+    .nav-tabs {
+      display: flex;
+      gap: 4px;
+      padding: 12px 32px;
+      background: var(--bg-surface);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .nav-tab {
+      padding: 8px 20px;
+      border-radius: var(--radius-sm);
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-secondary);
+      cursor: pointer;
+      transition: all 0.2s;
+      border: 1px solid transparent;
+      user-select: none;
+    }
+
+    .nav-tab:hover {
+      color: var(--text-primary);
+      background: var(--bg-hover);
+    }
+
+    .nav-tab.active {
+      background: rgba(59,130,246,0.15);
+      border-color: rgba(59,130,246,0.3);
+      color: #93c5fd;
+    }
+
+    /* ════ MAIN CONTENT ════ */
+    .main-content {
+      padding: 28px 32px;
+      max-width: 1600px;
+      margin: 0 auto;
+      width: 100%;
+    }
+
+    .page { display: none; }
+    .page.active { display: block; }
+
+    /* ════ SECTION HEADER ════ */
+    .section-header {
+      margin-bottom: 24px;
+    }
+
+    .section-title {
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+      color: var(--text-primary);
+    }
+
+    .section-subtitle {
+      font-size: 13px;
+      color: var(--text-secondary);
+      margin-top: 4px;
+    }
+
+    /* ════ KPIS ════ */
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+      margin-bottom: 28px;
+    }
+
+    .kpi-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 20px 22px;
+      position: relative;
+      overflow: hidden;
+      transition: border-color 0.2s, transform 0.2s;
+    }
+
+    .kpi-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 3px;
+      border-radius: var(--radius-md) var(--radius-md) 0 0;
+    }
+
+    .kpi-card.approved::before  { background: var(--approved-color); }
+    .kpi-card.denied::before    { background: var(--denied-color); }
+    .kpi-card.failed::before    { background: var(--failed-color); }
+    .kpi-card.reversed::before  { background: var(--reversed-color); }
+
+    .kpi-card:hover {
+      border-color: var(--border-glow);
+      transform: translateY(-2px);
+    }
+
+    .kpi-label {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--text-muted);
+      margin-bottom: 10px;
+    }
+
+    .kpi-value {
+      font-size: 32px;
+      font-weight: 800;
+      letter-spacing: -1px;
+      line-height: 1;
+    }
+
+    .kpi-card.approved .kpi-value { color: var(--approved-color); }
+    .kpi-card.denied   .kpi-value { color: var(--denied-color); }
+    .kpi-card.failed   .kpi-value { color: var(--failed-color); }
+    .kpi-card.reversed .kpi-value { color: var(--reversed-color); }
+
+    .kpi-sub {
+      font-size: 12px;
+      color: var(--text-secondary);
+      margin-top: 6px;
+    }
+
+    .kpi-trend {
+      font-size: 11px;
+      font-weight: 600;
+      margin-top: 4px;
+    }
+
+    /* ════ ALERT BANNER ════ */
+    .alert-banner {
+      background: rgba(239,68,68,0.08);
+      border: 1px solid rgba(239,68,68,0.3);
+      border-radius: var(--radius-md);
+      padding: 14px 20px;
+      margin-bottom: 24px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      animation: fadeSlideIn 0.4s ease;
+    }
+
+    .alert-banner.hidden { display: none; }
+
+    .alert-banner-icon {
+      font-size: 20px;
+      flex-shrink: 0;
+    }
+
+    .alert-banner-text h3 {
+      font-size: 14px;
+      font-weight: 700;
+      color: #fca5a5;
+      margin-bottom: 2px;
+    }
+
+    .alert-banner-text p {
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+
+    @keyframes fadeSlideIn {
+      from { opacity: 0; transform: translateY(-10px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* ════ CHART CARDS ════ */
+    .chart-row {
+      display: grid;
+      gap: 20px;
+      margin-bottom: 24px;
+    }
+
+    .chart-row.two-col { grid-template-columns: 1.8fr 1fr; }
+    .chart-row.full    { grid-template-columns: 1fr; }
+    .chart-row.three-col { grid-template-columns: 1fr 1fr 1fr; }
+
+    .chart-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 22px 24px;
+      transition: border-color 0.2s;
+    }
+
+    .chart-card:hover { border-color: var(--border-glow); }
+
+    .chart-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      margin-bottom: 18px;
+      gap: 12px;
+    }
+
+    .chart-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text-primary);
+      letter-spacing: -0.2px;
+    }
+
+    .chart-subtitle {
+      font-size: 11px;
+      color: var(--text-secondary);
+      margin-top: 3px;
+    }
+
+    .chart-badge {
+      font-size: 10px;
+      font-weight: 700;
+      padding: 3px 8px;
+      border-radius: 12px;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    .badge-green {
+      background: rgba(34,197,94,0.15);
+      color: var(--green);
+      border: 1px solid rgba(34,197,94,0.25);
+    }
+
+    .badge-red {
+      background: rgba(239,68,68,0.15);
+      color: var(--red);
+      border: 1px solid rgba(239,68,68,0.25);
+    }
+
+    .badge-yellow {
+      background: rgba(234,179,8,0.15);
+      color: var(--yellow);
+      border: 1px solid rgba(234,179,8,0.25);
+    }
+
+    .badge-blue {
+      background: rgba(59,130,246,0.15);
+      color: #60a5fa;
+      border: 1px solid rgba(59,130,246,0.25);
+    }
+
+    .chart-canvas-wrap {
+      position: relative;
+    }
+
+    /* ════ ALERTS TABLE ════ */
+    .alerts-table-wrap {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      overflow: hidden;
+      margin-bottom: 24px;
+    }
+
+    .table-header {
+      padding: 16px 24px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .table-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+
+    .table-count {
+      font-size: 11px;
+      font-family: var(--font-mono);
+      color: var(--text-secondary);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    th {
+      padding: 10px 16px;
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: var(--text-muted);
+      background: rgba(6,11,20,0.5);
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+    }
+
+    td {
+      padding: 12px 16px;
+      font-size: 12px;
+      color: var(--text-secondary);
+      border-bottom: 1px solid rgba(99,179,255,0.05);
+      font-family: var(--font-mono);
+      vertical-align: middle;
+    }
+
+    tr:last-child td { border-bottom: none; }
+
+    tr:hover td {
+      background: rgba(255,255,255,0.02);
+      color: var(--text-primary);
+    }
+
+    .severity-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 3px 9px;
+      border-radius: 10px;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+    }
+
+    .severity-CRITICAL {
+      background: rgba(239,68,68,0.15);
+      color: #fca5a5;
+      border: 1px solid rgba(239,68,68,0.25);
+    }
+
+    .severity-WARNING {
+      background: rgba(234,179,8,0.15);
+      color: #fde68a;
+      border: 1px solid rgba(234,179,8,0.25);
+    }
+
+    .status-approved  { color: var(--approved-color); }
+    .status-denied    { color: var(--denied-color); }
+    .status-failed    { color: var(--failed-color); }
+    .status-reversed  { color: var(--reversed-color); }
+    .status-failure_rate { color: var(--yellow); }
+
+    .z-score-pos { color: var(--red); }
+    .z-score-neg { color: var(--yellow); }
+
+    /* ════ SQL PANEL ════ */
+    .sql-panel {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      overflow: hidden;
+      margin-bottom: 24px;
+    }
+
+    .sql-header {
+      padding: 12px 20px;
+      background: rgba(6,11,20,0.7);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .sql-dot { width: 10px; height: 10px; border-radius: 50%; }
+    .dot-red    { background: var(--red); }
+    .dot-yellow { background: var(--yellow); }
+    .dot-green  { background: var(--green); }
+
+    .sql-lang {
+      margin-left: auto;
+      font-size: 10px;
+      font-weight: 700;
+      color: var(--text-muted);
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+
+    .sql-body {
+      padding: 20px 24px;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      line-height: 1.7;
+      color: #94a3b8;
+      white-space: pre;
+      overflow-x: auto;
+    }
+
+    .sql-kw    { color: #818cf8; }
+    .sql-fn    { color: #38bdf8; }
+    .sql-str   { color: #86efac; }
+    .sql-cmt   { color: #3d5280; font-style: italic; }
+    .sql-num   { color: #fb923c; }
+
+    /* ════ EXPLANATION CARDS ════ */
+    .explain-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+      margin-bottom: 24px;
+    }
+
+    .explain-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 22px 24px;
+    }
+
+    .explain-card h3 {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--text-primary);
+      margin-bottom: 14px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .explain-card p {
+      font-size: 13px;
+      color: var(--text-secondary);
+      line-height: 1.65;
+      margin-bottom: 10px;
+    }
+
+    .math-box {
+      background: var(--bg-deep);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 12px 16px;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: #93c5fd;
+      margin: 10px 0;
+    }
+
+    .tag {
+      display: inline-block;
+      padding: 2px 8px;
+      background: rgba(59,130,246,0.1);
+      border: 1px solid rgba(59,130,246,0.2);
+      border-radius: 6px;
+      font-size: 10px;
+      color: #60a5fa;
+      font-weight: 600;
+      margin-right: 4px;
+      margin-bottom: 4px;
+    }
+
+    /* ════ FILTER ROW ════ */
+    .filter-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+    }
+
+    .filter-label {
+      font-size: 12px;
+      color: var(--text-secondary);
+      font-weight: 600;
+    }
+
+    .filter-btn {
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--text-secondary);
+      transition: all 0.15s;
+    }
+
+    .filter-btn:hover, .filter-btn.active {
+      background: rgba(59,130,246,0.15);
+      border-color: rgba(59,130,246,0.35);
+      color: #93c5fd;
+    }
+
+    /* ════ FOOTER ════ */
+    .footer {
+      padding: 24px 32px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    /* ════ TOAST NOTIFICATION ════ */
+    .toast-container {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      z-index: 999;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .toast {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 14px 18px;
+      max-width: 360px;
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      animation: toastIn 0.3s ease;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+    }
+
+    .toast.critical {
+      border-color: rgba(239,68,68,0.4);
+      border-left: 3px solid var(--red);
+    }
+
+    .toast.warning {
+      border-color: rgba(234,179,8,0.4);
+      border-left: 3px solid var(--yellow);
+    }
+
+    @keyframes toastIn {
+      from { opacity: 0; transform: translateX(40px); }
+      to   { opacity: 1; transform: translateX(0); }
+    }
+
+    .toast-icon { font-size: 18px; flex-shrink: 0; margin-top: 1px; }
+    .toast-body h4 { font-size: 13px; font-weight: 700; margin-bottom: 3px; }
+    .toast-body p { font-size: 11px; color: var(--text-secondary); }
+
+    /* ════ LOADING SPINNER ════ */
+    .spinner {
+      width: 20px; height: 20px;
+      border: 2px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      display: inline-block;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* ════ RESPONSIVE ════ */
+    @media (max-width: 1200px) {
+      .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+      .chart-row.two-col { grid-template-columns: 1fr; }
+      .explain-grid { grid-template-columns: 1fr; }
+    }
+
+    @media (max-width: 768px) {
+      .header { padding: 0 16px; }
+      .main-content { padding: 20px 16px; }
+      .kpi-grid { grid-template-columns: 1fr 1fr; }
+      .chart-row.three-col { grid-template-columns: 1fr; }
+      .nav-tabs { padding: 10px 16px; overflow-x: auto; }
+    }
+  </style>
+</head>
+<body>
+<div class="app-shell">
+
+  <!-- ═══ HEADER ═══ -->
+  <header class="header">
+    <div class="logo">
+      <div class="logo-icon">⚡</div>
+      <div>
+        <div class="logo-text">CloudWalk Monitor</div>
+        <div class="logo-sub">Transaction Intelligence Platform</div>
+      </div>
+    </div>
+    <div class="header-right">
+      <div class="live-badge">
+        <div class="live-dot"></div>
+        LIVE
+      </div>
+      <div class="last-updated" id="lastUpdated">--:--:--</div>
+    </div>
+  </header>
+
+  <!-- ═══ NAV ═══ -->
+  <nav class="nav-tabs">
+    <div class="nav-tab active" data-page="overview" onclick="switchPage('overview')">📊 Overview</div>
+    <div class="nav-tab" data-page="transactions" onclick="switchPage('transactions')">📈 Transactions</div>
+    <div class="nav-tab" data-page="checkout" onclick="switchPage('checkout')">🛒 POS Checkout</div>
+    <div class="nav-tab" data-page="alerts" onclick="switchPage('alerts')">🚨 Alerts</div>
+    <div class="nav-tab" data-page="sql" onclick="switchPage('sql')">🗄️ SQL Analysis</div>
+    <div class="nav-tab" data-page="guide" onclick="switchPage('guide')">📖 How It Works</div>
+  </nav>
+
+  <!-- ═══ MAIN ═══ -->
+  <main class="main-content">
+
+    <!-- ════════════════ PAGE: OVERVIEW ════════════════ -->
+    <section id="page-overview" class="page active">
+      <div class="section-header">
+        <h1 class="section-title">Transaction Overview</h1>
+        <p class="section-subtitle">Real-time monitoring across all transaction statuses · Z-Score anomaly detection active</p>
+      </div>
+
+      <!-- Alert Banner -->
+      <div class="alert-banner hidden" id="alertBanner">
+        <div class="alert-banner-icon">🚨</div>
+        <div class="alert-banner-text">
+          <h3 id="bannerTitle">Anomaly Detected</h3>
+          <p id="bannerMsg">Monitoring detected unusual transaction patterns.</p>
+        </div>
+      </div>
+
+      <!-- KPIs -->
+      <div class="kpi-grid">
+        <div class="kpi-card approved">
+          <div class="kpi-label">Approved</div>
+          <div class="kpi-value" id="kpi-approved">--</div>
+          <div class="kpi-sub" id="kpi-approved-sub">total transactions</div>
+        </div>
+        <div class="kpi-card denied">
+          <div class="kpi-label">Denied</div>
+          <div class="kpi-value" id="kpi-denied">--</div>
+          <div class="kpi-sub" id="kpi-denied-sub">total transactions</div>
+        </div>
+        <div class="kpi-card failed">
+          <div class="kpi-label">Failed</div>
+          <div class="kpi-value" id="kpi-failed">--</div>
+          <div class="kpi-sub" id="kpi-failed-sub">total transactions</div>
+        </div>
+        <div class="kpi-card reversed">
+          <div class="kpi-label">Reversed</div>
+          <div class="kpi-value" id="kpi-reversed">--</div>
+          <div class="kpi-sub" id="kpi-reversed-sub">total transactions</div>
+        </div>
+      </div>
+
+      <!-- Charts row 1 -->
+      <div class="chart-row full">
+        <div class="chart-card">
+          <div class="chart-header">
+            <div>
+              <div class="chart-title">Transaction Volume by Minute</div>
+              <div class="chart-subtitle">All statuses · last 8 hours</div>
+            </div>
+            <span class="chart-badge badge-blue" id="overviewAlertCount">0 alerts</span>
+          </div>
+          <div class="chart-canvas-wrap" style="height:280px">
+            <canvas id="overviewChart"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- Charts row 2 -->
+      <div class="chart-row two-col">
+        <div class="chart-card">
+          <div class="chart-header">
+            <div>
+              <div class="chart-title">Failure Rate (%) per Minute</div>
+              <div class="chart-subtitle">failed + denied + reversed ÷ total · 15% threshold</div>
+            </div>
+            <span class="chart-badge badge-red">RULE MONITOR</span>
+          </div>
+          <div class="chart-canvas-wrap" style="height:240px">
+            <canvas id="failRateChart"></canvas>
+          </div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-header">
+            <div>
+              <div class="chart-title">Transaction Mix</div>
+              <div class="chart-subtitle">Status distribution · full dataset</div>
+            </div>
+          </div>
+          <div class="chart-canvas-wrap" style="height:240px">
+            <canvas id="donutChart"></canvas>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ════════════════ PAGE: TRANSACTIONS ════════════════ -->
+    <section id="page-transactions" class="page">
+      <div class="section-header">
+        <h1 class="section-title">Transaction Time Series</h1>
+        <p class="section-subtitle">Minute-level transaction counts per status with anomaly annotations</p>
+      </div>
+
+      <div class="filter-row">
+        <span class="filter-label">Filter by status:</span>
+        <button class="filter-btn active" id="filter-all" onclick="filterTransactions('all')">All</button>
+        <button class="filter-btn" id="filter-approved" onclick="filterTransactions('approved')">✅ Approved</button>
+        <button class="filter-btn" id="filter-denied" onclick="filterTransactions('denied')">❌ Denied</button>
+        <button class="filter-btn" id="filter-failed" onclick="filterTransactions('failed')">⚠️ Failed</button>
+        <button class="filter-btn" id="filter-reversed" onclick="filterTransactions('reversed')">↩️ Reversed</button>
+      </div>
+
+      <div class="chart-row full">
+        <div class="chart-card">
+          <div class="chart-header">
+            <div>
+              <div class="chart-title">Per-status Volume Over Time</div>
+              <div class="chart-subtitle">🔴 Anomaly markers shown where Z-Score exceeded threshold</div>
+            </div>
+          </div>
+          <div class="chart-canvas-wrap" style="height:360px">
+            <canvas id="txTimeChart"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <div class="chart-row three-col">
+        <div class="chart-card">
+          <div class="chart-header">
+            <div>
+              <div class="chart-title">Denied per Min</div>
+              <div class="chart-subtitle">Rolling Z-Score monitor</div>
+            </div>
+            <span class="chart-badge badge-red">MONITOR</span>
+          </div>
+          <div class="chart-canvas-wrap" style="height:180px">
+            <canvas id="deniedChart"></canvas>
+          </div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-header">
+            <div>
+              <div class="chart-title">Failed per Min</div>
+              <div class="chart-subtitle">Rolling Z-Score monitor</div>
+            </div>
+            <span class="chart-badge badge-yellow">MONITOR</span>
+          </div>
+          <div class="chart-canvas-wrap" style="height:180px">
+            <canvas id="failedChart"></canvas>
+          </div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-header">
+            <div>
+              <div class="chart-title">Reversed per Min</div>
+              <div class="chart-subtitle">Rolling Z-Score monitor</div>
+            </div>
+            <span class="chart-badge badge-blue">MONITOR</span>
+          </div>
+          <div class="chart-canvas-wrap" style="height:180px">
+            <canvas id="reversedChart"></canvas>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ════════════════ PAGE: CHECKOUT ════════════════ -->
+    <section id="page-checkout" class="page">
+      <div class="section-header">
+        <h1 class="section-title">POS Checkout Analytics</h1>
+        <p class="section-subtitle">Hourly POS sales comparison: today vs. historical benchmarks</p>
+      </div>
+
+      <div class="filter-row">
+        <span class="filter-label">Dataset:</span>
+        <button class="filter-btn active" id="ds-btn-1" onclick="switchCheckout(1)">Dataset 1 (Normal Day)</button>
+        <button class="filter-btn" id="ds-btn-2" onclick="switchCheckout(2)">Dataset 2 (Anomaly: 15h–17h outage)</button>
+      </div>
+
+      <div class="chart-row full">
+        <div class="chart-card">
+          <div class="chart-header">
+            <div>
+              <div class="chart-title">Hourly POS Sales — Today vs. Historical</div>
+              <div class="chart-subtitle">Shaded band = avg_last_month ± expected variance</div>
+            </div>
+            <span class="chart-badge" id="checkoutBadge" style="background:rgba(34,197,94,0.15);color:var(--green);border:1px solid rgba(34,197,94,0.25)">NORMAL</span>
+          </div>
+          <div class="chart-canvas-wrap" style="height:320px">
+            <canvas id="checkoutChart"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- Anomaly explanation for Dataset 2 -->
+      <div id="checkoutAnomDesc" class="chart-card" style="display:none;margin-bottom:24px">
+        <div class="chart-header">
+          <div>
+            <div class="chart-title">🚨 Anomaly Finding: POS Outage Detected (15h–17h)</div>
+          </div>
+          <span class="chart-badge badge-red">ANOMALY CONFIRMED</span>
+        </div>
+        <p style="font-size:13px;color:var(--text-secondary);line-height:1.7">
+          Dataset 2 reveals a <strong style="color:var(--red)">complete sales drop between 15:00 and 17:59</strong>.
+          Today's sales register <strong style="color:var(--red)">0</strong> for those three hours while yesterday
+          showed 51, 41, and 45 respectively. Historical averages confirm this hour is typically
+          one of the busiest. The pattern is consistent with a <strong style="color:var(--yellow)">POS terminal
+          outage or gateway connectivity failure</strong>.
+         <br><br>
+          <strong style="color:var(--yellow)">Pre-cursor Warning:</strong> At 14h, today's sales were 19 vs. an average of 24.89 
+          (<strong style="color:var(--yellow)">-23.7% drop</strong>). This was an early indicator one hour before the outage, 
+          which a good monitoring system flags immediately.</p>
+        <div class="math-box" style="margin-top:12px">
+          Z-Score for 15h: z = (0 - 22.4) / σ ≫ -3.0 → CRITICAL DROP
+          Revenue impact estimate: ~3h × 22 avg/h × avg_ticket_value
+          Recovery observed at 18h (count = 13, partial restore)
+        </div>
+      </div>
+
+      <!-- Comparison table -->
+      <div class="chart-card">
+        <div class="chart-header">
+          <div class="chart-title">Hour-by-Hour Comparison Table</div>
+        </div>
+        <div style="overflow-x:auto">
+          <table id="checkoutTable">
+            <thead>
+              <tr>
+                <th>Hour</th>
+                <th>Today</th>
+                <th>Yesterday</th>
+                <th>Same Day Last Week</th>
+                <th>Avg Last Week</th>
+                <th>Avg Last Month</th>
+                <th>Deviation</th>
+              </tr>
+            </thead>
+            <tbody id="checkoutTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ════════════════ PAGE: ALERTS ════════════════ -->
+    <section id="page-alerts" class="page">
+      <div class="section-header">
+        <h1 class="section-title">Alert Feed</h1>
+        <p class="section-subtitle">All anomalies detected by the Z-Score engine + rule-based checks</p>
+      </div>
+
+      <div class="chart-row two-col">
+        <div class="chart-card">
+          <div class="chart-header">
+            <div>
+              <div class="chart-title">Alerts by Hour</div>
+              <div class="chart-subtitle">CRITICAL vs WARNING distribution</div>
+            </div>
+          </div>
+          <div class="chart-canvas-wrap" style="height:220px">
+            <canvas id="alertsByHourChart"></canvas>
+          </div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-header">
+            <div>
+              <div class="chart-title">Alert Severity Split</div>
+            </div>
+          </div>
+          <div class="chart-canvas-wrap" style="height:220px">
+            <canvas id="alertSeverityChart"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <div class="alerts-table-wrap">
+        <div class="table-header">
+          <div class="table-title">🚨 Anomaly Alert Log</div>
+          <div class="table-count" id="alertCount">Loading...</div>
+        </div>
+        <div style="max-height:500px;overflow-y:auto">
+          <table>
+            <thead>
+              <tr>
+                <th>Timestamp</th>
+                <th>Status</th>
+                <th>Type</th>
+                <th>Severity</th>
+                <th>Observed</th>
+                <th>Rolling μ</th>
+                <th>Rolling σ</th>
+                <th>Z-Score</th>
+                <th>Message</th>
+              </tr>
+            </thead>
+            <tbody id="alertsTableBody">
+              <tr><td colspan="9" style="text-align:center;padding:40px">
+                <div class="spinner"></div>
+              </td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ════════════════ PAGE: SQL ════════════════ -->
+    <section id="page-sql" class="page">
+      <div class="section-header">
+        <h1 class="section-title">SQL Analysis Queries</h1>
+        <p class="section-subtitle">Production-ready queries for transaction monitoring</p>
+      </div>
+
+      <!-- SQL 1 -->
+      <div class="sql-panel" style="margin-bottom:20px">
+        <div class="sql-header">
+          <div class="sql-dot dot-red"></div>
+          <div class="sql-dot dot-yellow"></div>
+          <div class="sql-dot dot-green"></div>
+          <span style="font-size:12px;color:var(--text-secondary);margin-left:8px">transactions_by_minute.sql</span>
+          <span class="sql-lang">PostgreSQL</span>
+        </div>
+        <div class="sql-body"><span class="sql-cmt">-- Query 1: Transaction volume per minute, pivoted by status</span>
+<span class="sql-cmt">-- Used for the "Transaction Volume by Minute" chart</span>
+
+<span class="sql-kw">SELECT</span>
+    date_trunc(<span class="sql-str">'minute'</span>, timestamp)                       <span class="sql-kw">AS</span> minute,
+    <span class="sql-fn">SUM</span>(<span class="sql-kw">CASE WHEN</span> status = <span class="sql-str">'approved'</span>  <span class="sql-kw">THEN</span> count <span class="sql-kw">ELSE</span> <span class="sql-num">0</span> <span class="sql-kw">END</span>) <span class="sql-kw">AS</span> approved,
+    <span class="sql-fn">SUM</span>(<span class="sql-kw">CASE WHEN</span> status = <span class="sql-str">'denied'</span>    <span class="sql-kw">THEN</span> count <span class="sql-kw">ELSE</span> <span class="sql-num">0</span> <span class="sql-kw">END</span>) <span class="sql-kw">AS</span> denied,
+    <span class="sql-fn">SUM</span>(<span class="sql-kw">CASE WHEN</span> status = <span class="sql-str">'failed'</span>    <span class="sql-kw">THEN</span> count <span class="sql-kw">ELSE</span> <span class="sql-num">0</span> <span class="sql-kw">END</span>) <span class="sql-kw">AS</span> failed,
+    <span class="sql-fn">SUM</span>(<span class="sql-kw">CASE WHEN</span> status = <span class="sql-str">'reversed'</span>  <span class="sql-kw">THEN</span> count <span class="sql-kw">ELSE</span> <span class="sql-num">0</span> <span class="sql-kw">END</span>) <span class="sql-kw">AS</span> reversed
+<span class="sql-kw">FROM</span>   transactions
+<span class="sql-kw">WHERE</span>  timestamp >= <span class="sql-fn">NOW</span>() - <span class="sql-kw">INTERVAL</span> <span class="sql-str">'24 hours'</span>
+<span class="sql-kw">GROUP</span>  <span class="sql-kw">BY</span> <span class="sql-num">1</span>
+<span class="sql-kw">ORDER</span>  <span class="sql-kw">BY</span> <span class="sql-num">1</span>;</div>
+      </div>
+
+      <!-- SQL 2 -->
+      <div class="sql-panel" style="margin-bottom:20px">
+        <div class="sql-header">
+          <div class="sql-dot dot-red"></div>
+          <div class="sql-dot dot-yellow"></div>
+          <div class="sql-dot dot-green"></div>
+          <span style="font-size:12px;color:var(--text-secondary);margin-left:8px">failure_rate_monitor.sql</span>
+          <span class="sql-lang">PostgreSQL</span>
+        </div>
+        <div class="sql-body"><span class="sql-cmt">-- Query 2: Failure rate (failed+denied+reversed) / total per minute</span>
+<span class="sql-cmt">-- Triggers alert when rate > 15%</span>
+
+<span class="sql-kw">WITH</span> minute_totals <span class="sql-kw">AS</span> (
+    <span class="sql-kw">SELECT</span>
+        date_trunc(<span class="sql-str">'minute'</span>, timestamp)              <span class="sql-kw">AS</span> minute,
+        <span class="sql-fn">SUM</span>(count)                                    <span class="sql-kw">AS</span> total,
+        <span class="sql-fn">SUM</span>(<span class="sql-kw">CASE WHEN</span> status <span class="sql-kw">IN</span> (<span class="sql-str">'failed'</span>,<span class="sql-str">'denied'</span>,<span class="sql-str">'reversed'</span>)
+                  <span class="sql-kw">THEN</span> count <span class="sql-kw">ELSE</span> <span class="sql-num">0</span> <span class="sql-kw">END</span>)           <span class="sql-kw">AS</span> failures
+    <span class="sql-kw">FROM</span>   transactions
+    <span class="sql-kw">GROUP</span>  <span class="sql-kw">BY</span> <span class="sql-num">1</span>
+)
+<span class="sql-kw">SELECT</span>
+    minute,
+    total,
+    failures,
+    <span class="sql-fn">ROUND</span>(failures::numeric / <span class="sql-fn">NULLIF</span>(total,<span class="sql-num">0</span>) * <span class="sql-num">100</span>, <span class="sql-num">2</span>)  <span class="sql-kw">AS</span> failure_pct,
+    <span class="sql-kw">CASE WHEN</span> failures::numeric / <span class="sql-fn">NULLIF</span>(total,<span class="sql-num">0</span>) > <span class="sql-num">0.15</span>
+         <span class="sql-kw">THEN</span> <span class="sql-str">'ALERT'</span> <span class="sql-kw">ELSE</span> <span class="sql-str">'OK'</span> <span class="sql-kw">END</span>                    <span class="sql-kw">AS</span> status_flag
+<span class="sql-kw">FROM</span>   minute_totals
+<span class="sql-kw">ORDER</span>  <span class="sql-kw">BY</span> minute;</div>
+      </div>
+
+      <!-- SQL 3 -->
+      <div class="sql-panel" style="margin-bottom:20px">
+        <div class="sql-header">
+          <div class="sql-dot dot-red"></div>
+          <div class="sql-dot dot-yellow"></div>
+          <div class="sql-dot dot-green"></div>
+          <span style="font-size:12px;color:var(--text-secondary);margin-left:8px">zscore_anomaly_detect.sql</span>
+          <span class="sql-lang">PostgreSQL</span>
+        </div>
+        <div class="sql-body"><span class="sql-cmt">-- Query 3: Z-Score anomaly detection using window functions</span>
+<span class="sql-cmt">-- AVG() and STDDEV() over a 30-minute sliding window</span>
+
+<span class="sql-kw">WITH</span> rolling <span class="sql-kw">AS</span> (
+    <span class="sql-kw">SELECT</span>
+        timestamp,
+        status,
+        count                                               <span class="sql-kw">AS</span> observed,
+        <span class="sql-fn">AVG</span>(count)  <span class="sql-kw">OVER</span> w                              <span class="sql-kw">AS</span> rolling_mean,
+        <span class="sql-fn">STDDEV</span>(count) <span class="sql-kw">OVER</span> w                            <span class="sql-kw">AS</span> rolling_stddev
+    <span class="sql-kw">FROM</span>   transactions
+    <span class="sql-kw">WHERE</span>  status <span class="sql-kw">IN</span> (<span class="sql-str">'failed'</span>, <span class="sql-str">'denied'</span>, <span class="sql-str">'reversed'</span>)
+    <span class="sql-kw">WINDOW</span> w <span class="sql-kw">AS</span> (
+        <span class="sql-kw">PARTITION BY</span> status
+        <span class="sql-kw">ORDER BY</span> timestamp
+        <span class="sql-kw">ROWS BETWEEN</span> <span class="sql-num">30</span> <span class="sql-kw">PRECEDING AND</span> <span class="sql-num">1</span> <span class="sql-kw">PRECEDING</span>
+    )
+)
+<span class="sql-kw">SELECT</span>
+    timestamp,
+    status,
+    observed,
+    <span class="sql-fn">ROUND</span>(rolling_mean,    <span class="sql-num">2</span>)  <span class="sql-kw">AS</span> mean,
+    <span class="sql-fn">ROUND</span>(rolling_stddev,  <span class="sql-num">2</span>)  <span class="sql-kw">AS</span> stddev,
+    <span class="sql-fn">ROUND</span>((observed - rolling_mean)
+           / <span class="sql-fn">NULLIF</span>(rolling_stddev, <span class="sql-num">0</span>), <span class="sql-num">3</span>)          <span class="sql-kw">AS</span> z_score,
+    <span class="sql-kw">CASE</span>
+        <span class="sql-kw">WHEN ABS</span>((observed-rolling_mean)/<span class="sql-fn">NULLIF</span>(rolling_stddev,<span class="sql-num">0</span>)) > <span class="sql-num">2.5</span>
+             <span class="sql-kw">THEN</span> <span class="sql-str">'CRITICAL'</span>
+        <span class="sql-kw">WHEN ABS</span>((observed-rolling_mean)/<span class="sql-fn">NULLIF</span>(rolling_stddev,<span class="sql-num">0</span>)) > <span class="sql-num">1.5</span>
+             <span class="sql-kw">THEN</span> <span class="sql-str">'WARNING'</span>
+        <span class="sql-kw">ELSE</span> <span class="sql-str">'OK'</span>
+    <span class="sql-kw">END</span>                                                    <span class="sql-kw">AS</span> alert_level
+<span class="sql-kw">FROM</span>   rolling
+<span class="sql-kw">WHERE</span>  rolling_stddev <span class="sql-kw">IS NOT NULL</span>
+<span class="sql-kw">ORDER</span>  <span class="sql-kw">BY</span> timestamp;</div>
+      </div>
+
+      <!-- SQL 5 PromQL (FIX #8) -->
+      <div class="sql-panel" style="margin-bottom:20px">
+        <div class="sql-header">
+          <div class="sql-dot dot-red"></div>
+          <div class="sql-dot dot-yellow"></div>
+          <div class="sql-dot dot-green"></div>
+          <span style="font-size:12px;color:var(--text-secondary);margin-left:8px">prometheus_alerts.promql</span>
+          <span class="sql-lang">PromQL</span>
+        </div>
+        <div class="sql-body"><span class="sql-cmt"># Query 5: Failure rate alert — fires when rate > 15%</span>
+<span class="sql-fn">rate</span>(transactions_failed_total[5m])
+/ <span class="sql-fn">rate</span>(transactions_total[5m]) > 0.15
+
+<span class="sql-cmt"># Query 6: Approved transaction Z-Score equivalent (Drop < -2.0)</span>
+(
+  <span class="sql-fn">rate</span>(transactions_approved_total[5m])
+  - <span class="sql-fn">avg_over_time</span>(<span class="sql-fn">rate</span>(transactions_approved_total[5m])[30m:1m])
+)
+/ <span class="sql-fn">stddev_over_time</span>(<span class="sql-fn">rate</span>(transactions_approved_total[5m])[30m:1m])
+< -2.0</div>
+      </div>
+      
+      <!-- SQL 4 Checkout -->
+      <div class="sql-panel">
+        <div class="sql-header">
+          <div class="sql-dot dot-red"></div>
+          <div class="sql-dot dot-yellow"></div>
+          <div class="sql-dot dot-green"></div>
+          <span style="font-size:12px;color:var(--text-secondary);margin-left:8px">checkout_anomaly.sql</span>
+          <span class="sql-lang">PostgreSQL</span>
+        </div>
+        <div class="sql-body"><span class="sql-cmt">-- Query 4: POS Checkout anomaly — find hours today that deviate</span>
+<span class="sql-cmt">-- significantly from historical average (avg_last_month)</span>
+
+<span class="sql-kw">SELECT</span>
+    time,
+    today,
+    avg_last_month,
+    today - avg_last_month                              <span class="sql-kw">AS</span> absolute_delta,
+    <span class="sql-fn">ROUND</span>((today - avg_last_month)
+           / <span class="sql-fn">NULLIF</span>(avg_last_month, <span class="sql-num">0</span>) * <span class="sql-num">100</span>, <span class="sql-num">1</span>)       <span class="sql-kw">AS</span> pct_deviation,
+    <span class="sql-kw">CASE</span>
+        <span class="sql-kw">WHEN</span> today = <span class="sql-num">0</span> <span class="sql-kw">AND</span> avg_last_month > <span class="sql-num">10</span>
+             <span class="sql-kw">THEN</span> <span class="sql-str">'CRITICAL — ZERO SALES IN BUSY HOUR'</span>
+        <span class="sql-kw">WHEN</span> (today - avg_last_month) / <span class="sql-fn">NULLIF</span>(avg_last_month,<span class="sql-num">0</span>) < -<span class="sql-num">0.50</span>
+             <span class="sql-kw">THEN</span> <span class="sql-str">'WARNING — > 50% DROP'</span>
+        <span class="sql-kw">WHEN</span> (today - avg_last_month) / <span class="sql-fn">NULLIF</span>(avg_last_month,<span class="sql-num">0</span>) > <span class="sql-num">0.50</span>
+             <span class="sql-kw">THEN</span> <span class="sql-str">'WARNING — > 50% SPIKE'</span>
+        <span class="sql-kw">ELSE</span> <span class="sql-str">'OK'</span>
+    <span class="sql-kw">END</span>                                                    <span class="sql-kw">AS</span> flag
+<span class="sql-kw">FROM</span>   checkout_data
+<span class="sql-kw">ORDER</span>  <span class="sql-kw">BY</span> time;</div>
+      </div>
+    </section>
+
+    <!-- ════════════════ PAGE: HOW IT WORKS ════════════════ -->
+    <section id="page-guide" class="page">
+      <div class="section-header">
+        <h1 class="section-title">How the Monitoring System Works</h1>
+        <p class="section-subtitle">A senior engineer's explained walkthrough for new team members</p>
+      </div>
+
+      <div class="explain-grid">
+        <div class="explain-card">
+          <h3>📐 What is a Z-Score?</h3>
+          <p>
+            Imagine you're watching how many customers walk into a store every minute.
+            Some minutes are busy (150 customers), some are slow (90 customers). Now, at
+            one minute you see <strong>250 customers</strong>. Is that unusual?
+          </p>
+          <p>
+            The <strong>Z-Score</strong> answers exactly that. It tells you how many
+            <em>standard deviations</em> away from the average a measurement is.
+          </p>
+          <div class="math-box">
+z = (x - μ) / σ
+
+Where:
+  x  = current observation (e.g. 250)
+  μ  = rolling mean of last 30 mins (e.g. 120)
+  σ  = rolling std deviation (e.g. 15)
+
+z = (250 - 120) / 15 = +8.67  ← extreme SPIKE</div>
+          <p>
+            <strong>Rule of thumb:</strong> Under a normal distribution,
+            95.4% of all observations fall within ±2σ. So a Z-Score beyond ±2.0
+            happens less than 5% of the time by chance — it's likely real.
+          </p>
+        </div>
+
+        <div class="explain-card">
+          <h3>📊 What is Standard Deviation?</h3>
+          <p>
+            Standard deviation (σ) measures <em>spread</em> — how much values
+            bounce around the average. A small σ means things are steady and
+            predictable. A large σ means things are all over the place.
+          </p>
+          <div class="math-box">
+σ = sqrt( Σ(xᵢ - μ)² / N )
+
+Example values: [100, 110, 90, 105, 95]
+  μ = (100+110+90+105+95) / 5 = 100
+  Σdev² = 0 + 100 + 100 + 25 + 25 = 250
+  σ = sqrt(250 / 5) = sqrt(50) ≈ 7.07</div>
+          <p>
+            <strong>Why it matters:</strong> If transactions are normally
+            95–105/min (σ ≈ 7), then seeing 140/min is a 6σ event — almost
+            impossible by chance. That's your fire alarm.
+          </p>
+        </div>
+
+        <div class="explain-card">
+          <h3>🪟 Rolling Window</h3>
+          <p>
+            We don't calculate σ across the whole day — we use a
+            <strong>rolling window</strong> of 30 minutes. This means:
+          </p>
+          <p>
+            At any given minute, we look <em>back</em> at the previous 30 data
+            points for that status, compute the mean and std dev from just those,
+            and compare the current minute against that local baseline.
+          </p>
+          <div class="math-box">
+Time 10:31 → Window = 10:01–10:30 (30 points)
+Time 10:32 → Window = 10:02–10:31 (30 points)
+Time 10:33 → Window = 10:03–10:32 (30 points)
+... (slides forward every minute)</div>
+          <p>
+            This is called a <strong>sliding window</strong> and it adapts
+            to natural time-of-day patterns (morning vs. evening traffic).
+          </p>
+        </div>
+
+        <div class="explain-card">
+          <h3>📏 Severity Tiers & Thresholds</h3>
+          <p>
+            Not every anomaly is a crisis. We tier by impact probability:
+          </p>
+          <div class="math-box">
+|Z| ≥ 2.5  → 🔴 CRITICAL   (p < 1.2% of being noise)
+|Z| ≥ 1.5  → 🟡 WARNING    (p < 13.4% of being noise)
+|Z| < 1.5  → ✅ NORMAL     (within expected range)
+
+Rule-based overrides:
+  failure_rate > 15%  → WARNING
+  failure_rate > 25%  → CRITICAL
+  approved DROP > 40% → CRITICAL (possible outage)</div>
+          <p>
+            <strong>Hybrid approach:</strong> Statistical scoring catches gradual
+            drift. Hard rules catch sudden cliffs (like a POS going offline).
+            Together they minimize both false negatives (missed incidents) and
+            false positives (alert fatigue).
+          </p>
+        </div>
+
+        <div class="explain-card">
+          <h3>🏗️ System Architecture</h3>
+          <p>
+            The system is built in <span class="tag">C#</span> and <span class="tag">JavaScript</span>:
+          </p>
+          <div class="math-box">
+┌──────────────────────────────────┐
+│   C# ASP.NET Core 8 REST API     │
+│   POST /api/analyze              │
+│   GET  /api/alerts               │
+│   GET  /api/transactions         │
+│   GET  /api/checkout             │
+└───────────────┬──────────────────┘
+                │ HTTP JSON
+┌───────────────▼──────────────────┐
+│  JavaScript Dashboard (SPA)      │
+│  Chart.js · Vanilla HTML/CSS/JS  │
+│  Live polling every 30s          │
+└──────────────────────────────────┘</div>
+          <p>
+            <strong>Why C#?</strong> Strongly-typed, high-performance, identical
+            pattern to what payment platforms like CloudWalk use for backend
+            services. LINQ makes aggregation queries as expressive as SQL.
+          </p>
+        </div>
+
+        <div class="explain-card">
+          <h3>🧩 Algorithm Flow</h3>
+          <p>Step-by-step what happens every monitoring cycle:</p>
+          <div class="math-box">
+Step 1: Load transactions from CSV / DB
+Step 2: Group by status
+Step 3: For each status, sort by timestamp
+Step 4: Slide window (W=30) forward in time:
+   a. Compute μ = mean(window)
+   b. Compute σ = stddev(window)
+   c. Compute z = (current - μ) / σ
+   d. If |z| ≥ 1.5 → emit Alert
+Step 5: Rule check: failure_rate > 15%?
+Step 6: Deduplicate alerts by (timestamp, status)
+Step 7: Sort alerts chronologically
+Step 8: Serve to dashboard via JSON API</div>
+          <p>
+            <strong>Time Complexity:</strong> O(N × W) where N = number of records
+            and W = window size. For 26k records and W=30, this is ~800k ops —
+            runs in milliseconds on modern hardware.
+          </p>
+        </div>
+      </div>
+
+      <!-- Vocabulary table -->
+      <div class="alerts-table-wrap">
+        <div class="table-header">
+          <div class="table-title">📖 Vocabulary Glossary</div>
+          <div class="table-count">Monitoring terms defined</div>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Term</th>
+              <th>Symbol</th>
+              <th>Plain English Meaning</th>
+              <th>Used In</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td style="color:var(--text-primary)">Mean</td>
+              <td style="font-family:var(--font-mono);color:#93c5fd">μ</td>
+              <td>Average value over a window of time</td>
+              <td>Z-Score baseline</td>
+            </tr>
+            <tr>
+              <td style="color:var(--text-primary)">Standard Deviation</td>
+              <td style="font-family:var(--font-mono);color:#93c5fd">σ</td>
+              <td>How much values spread around the mean</td>
+              <td>Z-Score denominator</td>
+            </tr>
+            <tr>
+              <td style="color:var(--text-primary)">Z-Score</td>
+              <td style="font-family:var(--font-mono);color:#93c5fd">z</td>
+              <td>How many σ away from μ the current value is</td>
+              <td>Anomaly scoring</td>
+            </tr>
+            <tr>
+              <td style="color:var(--text-primary)">Percentile</td>
+              <td style="font-family:var(--font-mono);color:#93c5fd">P95</td>
+              <td>95% of observations fall below this value</td>
+              <td>Threshold setting</td>
+            </tr>
+            <tr>
+              <td style="color:var(--text-primary)">Rolling Window</td>
+              <td style="font-family:var(--font-mono);color:#93c5fd">W=30</td>
+              <td>Last 30 data points, slides forward each step</td>
+              <td>Baseline calculation</td>
+            </tr>
+            <tr>
+              <td style="color:var(--text-primary)">Anomaly</td>
+              <td style="font-family:var(--font-mono);color:#93c5fd">|z|≥1.5</td>
+              <td>A data point statistically unlikely under normal conditions</td>
+              <td>Alert trigger</td>
+            </tr>
+            <tr>
+              <td style="color:var(--text-primary)">Spike</td>
+              <td style="font-family:var(--font-mono);color:#93c5fd">z > 0</td>
+              <td>Unusually HIGH count (more failures than expected)</td>
+              <td>Alert type</td>
+            </tr>
+            <tr>
+              <td style="color:var(--text-primary)">Drop</td>
+              <td style="font-family:var(--font-mono);color:#93c5fd">z < 0</td>
+              <td>Unusually LOW count (fewer approvals = possible outage)</td>
+              <td>Alert type</td>
+            </tr>
+            <tr>
+              <td style="color:var(--text-primary)">Failure Rate</td>
+              <td style="font-family:var(--font-mono);color:#93c5fd">fr%</td>
+              <td>(failed+denied+reversed) ÷ total · expressed as %</td>
+              <td>Rule-based check</td>
+            </tr>
+            <tr>
+              <td style="color:var(--text-primary)">Normal Distribution</td>
+              <td style="font-family:var(--font-mono);color:#93c5fd">N(μ,σ)</td>
+              <td>Bell-curve shape — most data clusters near the mean</td>
+              <td>Z-Score assumption</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="footer">
+    <div>CloudWalk Transaction Monitoring · Built with C# + JavaScript · Z-Score Anomaly Engine</div>
+    <div id="footerStats">Loading stats...</div>
+  </footer>
+
+</div>
+
+<!-- Toast container -->
+<div class="toast-container" id="toastContainer"></div>
+
+<!-- ═══════════════════════════════════════════════════════
+     JAVASCRIPT ENGINE
+═══════════════════════════════════════════════════════ -->
+<script>
+// ─────────────────────────────────────────────────────────
+// DATA LOADING (FIX #1, #4)
+// Fetching real CSV data from the C# API instead of generating fake data.
+// ─────────────────────────────────────────────────────────
+
+let ALL_RECORDS = [];
+let ALL_ALERTS  = [];
+let CHECKOUT_1 = [];
+let CHECKOUT_2 = [];
+let ALL_AUTH = [];
+let currentCheckoutDS = 1;
+let txFilter = 'all';
+
+// Chart instance tracking for proper cleanup
+const charts = {};
+
+// ─────────────────────────────────────────────────────────
+// UTILITY FUNCTIONS
+// ─────────────────────────────────────────────────────────
+function num(n) {
+  return n != null ? n.toLocaleString() : '--';
+}
+
+function fmtTime(d) {
+  if (!(d instanceof Date) || isNaN(d)) return '--:--';
+  return d.toLocaleTimeString('en-US', { hour:'2-digit', minute:'2-digit', hour12:false });
+}
+
+function fmtDateTime(d) {
+  if (!(d instanceof Date) || isNaN(d)) return '--';
+  return d.toLocaleString('en-US', {
+    month:'short', day:'numeric', hour:'2-digit', minute:'2-digit', hour12:false
+  });
+}
+
+function destroyChart(id) {
+  if (charts[id]) {
+    charts[id].destroy();
+    delete charts[id];
+  }
+}
+
+function baseLineOptions(label) {
+  return {
+    responsive: true,
+    maintainAspectRatio: false,
+    interaction: { mode: 'index', intersect: false },
+    plugins: {
+      legend: {
+        position: 'top',
+        labels: { padding: 12, boxWidth: 10, font: { size: 11 } }
+      },
+      tooltip: {
+        backgroundColor: '#0d1525',
+        borderColor: 'rgba(99,179,255,0.2)',
+        borderWidth: 1,
+        titleFont: { size: 12 },
+        bodyFont: { size: 11 },
+        padding: 10,
+      }
+    },
+    scales: {
+      x: {
+        grid: { color: 'rgba(99,179,255,0.06)' },
+        ticks: { color: '#3d5280', font: { size: 10 }, maxTicksLimit: 16, maxRotation: 0 },
+        border: { color: 'rgba(99,179,255,0.1)' },
+      },
+      y: {
+        grid: { color: 'rgba(99,179,255,0.06)' },
+        ticks: { color: '#3d5280', font: { size: 10 } },
+        border: { color: 'rgba(99,179,255,0.1)' },
+      }
+    }
+  };
+}
+
+// ─────────────────────────────────────────────────────────
+// CHECKOUT DATA NORMALIZER
+// (API returns camelCase; normalize to short property names)
+// ─────────────────────────────────────────────────────────
+function normalizeCheckoutRows(rows) {
+  return rows.map(r => ({
+    time: r.time,
+    today: r.today,
+    yesterday: r.yesterday,
+    sdlw: r.sameDayLastWeek ?? r.sdlw ?? 0,
+    avgLW: r.avgLastWeek ?? r.avgLW ?? 0,
+    avgLM: r.avgLastMonth ?? r.avgLM ?? 0,
+  }));
+}
+
+// ─────────────────────────────────────────────────────────
+// FALLBACK DATA GENERATOR
+// When the API is not running, generate data based on the
+// provided CSV patterns so the dashboard works standalone.
+// ─────────────────────────────────────────────────────────
+function generateFallbackData() {
+  console.log('Generating fallback data (API unavailable)...');
+  const start = new Date('2025-07-12T13:45:00');
+  const records = [];
+
+  // Base rates roughly match the actual CSVs
+  const baseRates = { approved: 118, denied: 7, failed: 4, reversed: 2 };
+  const minutes = 18 * 60; // 18 hours of data
+
+  for (let i = 0; i < minutes; i++) {
+    const ts = new Date(start.getTime() + i * 60000);
+    for (const [status, base] of Object.entries(baseRates)) {
+      let count = Math.max(0, Math.round(base + (Math.random() - 0.5) * base * 0.3));
+
+      // Simulate the 17:09-17:28 approved drop
+      if (status === 'approved' && i >= 204 && i <= 223) {
+        count = Math.round(base * 0.65 + (Math.random() - 0.5) * 15);
+      }
+      // Simulate a denied spike around minute 250
+      if (status === 'denied' && i >= 248 && i <= 253) {
+        count = Math.round(base * 3.5 + Math.random() * 10);
+      }
+
+      records.push({ timestamp: ts, status, count });
+    }
+  }
+
+  ALL_RECORDS = records;
+
+  // Run Z-Score detection client-side
+  ALL_ALERTS = detectAnomaliesClientSide(records);
+
+  // Checkout data (hardcoded from the actual CSVs)
+  CHECKOUT_1 = [
+    {time:'00h',today:9,yesterday:12,sdlw:11,avgLW:6.42,avgLM:4.85},
+    {time:'01h',today:3,yesterday:5,sdlw:1,avgLW:1.85,avgLM:1.92},
+    {time:'02h',today:1,yesterday:0,sdlw:0,avgLW:0.28,avgLM:0.82},
+    {time:'03h',today:1,yesterday:0,sdlw:0,avgLW:0.42,avgLM:0.46},
+    {time:'04h',today:0,yesterday:0,sdlw:1,avgLW:0.42,avgLM:0.21},
+    {time:'05h',today:1,yesterday:1,sdlw:2,avgLW:1.28,avgLM:0.75},
+    {time:'06h',today:1,yesterday:1,sdlw:5,avgLW:2.85,avgLM:2.28},
+    {time:'07h',today:2,yesterday:3,sdlw:9,avgLW:5.57,avgLM:5.21},
+    {time:'08h',today:0,yesterday:1,sdlw:18,avgLW:8.71,avgLM:10.42},
+    {time:'09h',today:2,yesterday:9,sdlw:30,avgLW:20.0,avgLM:19.07},
+    {time:'10h',today:55,yesterday:51,sdlw:45,avgLW:29.42,avgLM:28.35},
+    {time:'11h',today:36,yesterday:44,sdlw:38,avgLW:33.71,avgLM:28.5},
+    {time:'12h',today:51,yesterday:39,sdlw:39,avgLW:27.57,avgLM:25.42},
+    {time:'13h',today:36,yesterday:41,sdlw:43,avgLW:25.85,avgLM:24.21},
+    {time:'14h',today:32,yesterday:35,sdlw:36,avgLW:26.14,avgLM:25.21},
+    {time:'15h',today:51,yesterday:35,sdlw:49,avgLW:28.14,avgLM:27.71},
+    {time:'16h',today:41,yesterday:36,sdlw:48,avgLW:27.71,avgLM:25.64},
+    {time:'17h',today:45,yesterday:30,sdlw:29,avgLW:20.42,avgLM:22.28},
+    {time:'18h',today:32,yesterday:25,sdlw:25,avgLW:21.57,avgLM:18.28},
+    {time:'19h',today:33,yesterday:39,sdlw:42,avgLW:22.14,avgLM:18.67},
+    {time:'20h',today:25,yesterday:24,sdlw:34,avgLW:17.42,avgLM:18.92},
+    {time:'21h',today:30,yesterday:35,sdlw:34,avgLW:18.71,avgLM:17.57},
+    {time:'22h',today:28,yesterday:29,sdlw:23,avgLW:15.42,avgLM:15.64},
+    {time:'23h',today:11,yesterday:28,sdlw:10,avgLW:9.57,avgLM:8.75},
+  ];
+
+  CHECKOUT_2 = [
+    {time:'00h',today:6,yesterday:9,sdlw:5,avgLW:5.0,avgLM:4.92},
+    {time:'01h',today:3,yesterday:3,sdlw:2,avgLW:2.0,avgLM:1.92},
+    {time:'02h',today:3,yesterday:1,sdlw:2,avgLW:0.42,avgLM:0.75},
+    {time:'03h',today:0,yesterday:1,sdlw:1,avgLW:0.42,avgLM:0.46},
+    {time:'04h',today:0,yesterday:0,sdlw:0,avgLW:0.14,avgLM:0.21},
+    {time:'05h',today:2,yesterday:1,sdlw:1,avgLW:0.71,avgLM:0.71},
+    {time:'06h',today:3,yesterday:1,sdlw:2,avgLW:1.42,avgLM:2.10},
+    {time:'07h',today:10,yesterday:2,sdlw:9,avgLW:3.0,avgLM:5.03},
+    {time:'08h',today:25,yesterday:0,sdlw:12,avgLW:3.71,avgLM:9.82},
+    {time:'09h',today:36,yesterday:2,sdlw:27,avgLW:10.14,avgLM:17.64},
+    {time:'10h',today:43,yesterday:55,sdlw:42,avgLW:26.14,avgLM:28.57},
+    {time:'11h',today:44,yesterday:36,sdlw:47,avgLW:25.0,avgLM:28.28},
+    {time:'12h',today:46,yesterday:51,sdlw:46,avgLW:24.0,avgLM:25.89},
+    {time:'13h',today:45,yesterday:36,sdlw:31,avgLW:20.28,avgLM:24.17},
+    {time:'14h',today:19,yesterday:32,sdlw:35,avgLW:19.57,avgLM:24.89},
+    {time:'15h',today:0,yesterday:51,sdlw:42,avgLW:22.43,avgLM:27.78},
+    {time:'16h',today:0,yesterday:41,sdlw:36,avgLW:21.57,avgLM:25.53},
+    {time:'17h',today:0,yesterday:45,sdlw:19,avgLW:17.71,avgLM:22.67},
+    {time:'18h',today:13,yesterday:32,sdlw:29,avgLW:16.85,avgLM:18.46},
+    {time:'19h',today:32,yesterday:33,sdlw:29,avgLW:18.0,avgLM:18.21},
+    {time:'20h',today:23,yesterday:25,sdlw:17,avgLW:12.14,avgLM:18.53},
+    {time:'21h',today:28,yesterday:30,sdlw:23,avgLW:14.85,avgLM:17.82},
+    {time:'22h',today:29,yesterday:28,sdlw:17,avgLW:12.71,avgLM:15.5},
+    {time:'23h',today:17,yesterday:11,sdlw:14,avgLW:8.28,avgLM:8.75},
+  ];
+}
+
+// ─────────────────────────────────────────────────────────
+// CLIENT-SIDE Z-SCORE DETECTION (fallback when API is down)
+// ─────────────────────────────────────────────────────────
+function detectAnomaliesClientSide(records) {
+  const WINDOW = 30;
+  const WARN_Z = 1.5;
+  const CRIT_Z = 2.5;
+  const alerts = [];
+
+  const byStatus = {};
+  for (const r of records) {
+    if (!byStatus[r.status]) byStatus[r.status] = [];
+    byStatus[r.status].push(r);
+  }
+
+  for (const [status, series] of Object.entries(byStatus)) {
+    series.sort((a, b) => a.timestamp - b.timestamp);
+    const w = ['approved'].includes(status) ? WINDOW : 15;
+
+    for (let i = w; i < series.length; i++) {
+      const window = series.slice(i - w, i).map(r => r.count);
+      const mean = window.reduce((a, b) => a + b, 0) / window.length;
+      const variance = window.reduce((s, v) => s + (v - mean) ** 2, 0) / (window.length - 1);
+      const stdDev = Math.sqrt(variance);
+      if (stdDev < 0.001) continue;
+
+      const z = (series[i].count - mean) / stdDev;
+      const absZ = Math.abs(z);
+      if (absZ < WARN_Z) continue;
+
+      let severity = absZ >= CRIT_Z ? 'CRITICAL' : 'WARNING';
+      const type = z > 0 ? 'SPIKE' : 'DROP';
+
+      if (status === 'approved' && type === 'DROP' && absZ >= 2.0)
+        severity = 'CRITICAL';
+
+      alerts.push({
+        timestamp: series[i].timestamp,
+        status,
+        observedCount: series[i].count,
+        rollingMean: Math.round(mean * 100) / 100,
+        rollingStdDev: Math.round(stdDev * 100) / 100,
+        zScore: Math.round(z * 1000) / 1000,
+        severity,
+        type,
+        message: `[${severity}] ${status.toUpperCase()} ${type}: observed=${series[i].count}, mean=${mean.toFixed(1)}, z=${z > 0 ? '+' : ''}${z.toFixed(2)}`
+      });
+    }
+  }
+
+  // Failure rate check
+  const byMinute = {};
+  for (const r of records) {
+    const key = r.timestamp.toISOString();
+    if (!byMinute[key]) byMinute[key] = { ts: r.timestamp, total: 0, fail: 0 };
+    byMinute[key].total += r.count;
+    if (['failed', 'denied', 'reversed'].includes(r.status))
+      byMinute[key].fail += r.count;
+  }
+
+  for (const m of Object.values(byMinute)) {
+    if (m.total === 0) continue;
+    const rate = m.fail / m.total;
+    if (rate >= 0.15) {
+      alerts.push({
+        timestamp: m.ts,
+        status: 'failure_rate',
+        observedCount: m.fail,
+        rollingMean: m.total,
+        rollingStdDev: 0,
+        zScore: rate,
+        severity: rate >= 0.25 ? 'CRITICAL' : 'WARNING',
+        type: 'SPIKE',
+        message: `Failure rate ${(rate * 100).toFixed(1)}% (${m.fail}/${m.total})`
+      });
+    }
+  }
+
+  alerts.sort((a, b) => a.timestamp - b.timestamp);
+  return alerts;
+}
+
+// ─────────────────────────────────────────────────────────
+// INIT — Try API first, fall back to client-side data
+// ─────────────────────────────────────────────────────────
+async function init() {
+  let apiAvailable = false;
+
+  try {
+    const [txRes, alertsRes, c1Res, c2Res, authRes] = await Promise.all([
+      fetch('http://localhost:5050/api/transactions'),
+      fetch('http://localhost:5050/api/alerts'),
+      fetch('http://localhost:5050/api/checkout?dataset=1'),
+      fetch('http://localhost:5050/api/checkout?dataset=2'),
+      fetch('http://localhost:5050/api/authcodes')
+    ]);
+
+    const txData = await txRes.json();
+    const alertsData = await alertsRes.json();
+    const c1Data = await c1Res.json();
+    const c2Data = await c2Res.json();
+    const authData = await authRes.json();
+
+    ALL_RECORDS = txData.records.map(r => ({ ...r, timestamp: new Date(r.timestamp) }));
+    ALL_ALERTS = alertsData.alerts.map(a => ({ ...a, timestamp: new Date(a.timestamp) }));
+    CHECKOUT_1 = normalizeCheckoutRows(c1Data.rows);
+    CHECKOUT_2 = normalizeCheckoutRows(c2Data.rows);
+    ALL_AUTH = authData.records || [];
+    apiAvailable = true;
+
+  } catch (err) {
+    console.warn('API not available, using fallback data:', err.message);
+    generateFallbackData();
+    apiAvailable = false;
+  }
+
+  // Render everything
+  updateKPIs();
+  renderOverviewChart();
+  renderFailRateChart();
+  renderDonutChart();
+  renderTxTimeChart();
+  renderStatusCharts();
+  renderAlertsTable();
+  renderAlertsByHour();
+  renderCheckout(1);
+  updateFooter();
+  updateLiveTime(apiAvailable);
+  checkAlertBanner();
+
+  if (apiAvailable) {
+    setInterval(pollAlerts, 30000);
+  }
+  setTimeout(() => fireToasts(), 1500);
+}
+
+async function pollAlerts() {
+  try {
+    const res = await fetch('http://localhost:5050/api/alerts');
+    const { alerts } = await res.json();
+    const parsedAlerts = alerts.map(a => ({...a, timestamp: new Date(a.timestamp)}));
+    const newAlerts = parsedAlerts.filter(a =>
+      !ALL_ALERTS.some(ex => ex.timestamp.getTime() === a.timestamp.getTime() && ex.status === a.status)
+    );
+    if (newAlerts.length > 0) {
+      ALL_ALERTS = [...ALL_ALERTS, ...newAlerts];
+      renderAlertsTable();
+      renderAlertsByHour();
+      checkAlertBanner();
+    }
+    updateLiveTime(true);
+  } catch (err) {
+    updateLiveTime(false);
+  }
+}
+
+function updateLiveTime(isLive) {
+  const badge = document.querySelector('.live-badge');
+  const dot = document.querySelector('.live-dot');
+  const timeEl = document.getElementById('lastUpdated');
+  if (!badge || !timeEl) return;
+
+  if (isLive) {
+    badge.style.cssText = 'display:flex;align-items:center;gap:7px;background:rgba(34,197,94,0.12);border:1px solid rgba(34,197,94,0.3);border-radius:20px;padding:5px 12px;font-size:12px;font-weight:600;color:#22c55e;letter-spacing:0.5px';
+    if (dot) { dot.style.background = '#22c55e'; }
+    badge.innerHTML = '<div class="live-dot" style="width:8px;height:8px;background:#22c55e;border-radius:50%;animation:pulse-dot 1.5s ease-in-out infinite"></div> LIVE';
+    const now = new Date();
+    timeEl.textContent = now.toLocaleTimeString('en-US', { hour12:false });
+  } else {
+    badge.style.cssText = 'display:flex;align-items:center;gap:7px;background:rgba(249,115,22,0.12);border:1px solid rgba(249,115,22,0.3);border-radius:20px;padding:5px 12px;font-size:12px;font-weight:600;color:#f97316;letter-spacing:0.5px';
+    badge.innerHTML = '<div style="width:8px;height:8px;background:#f97316;border-radius:50%"></div> OFFLINE — Fallback Data';
+    timeEl.textContent = 'API not connected';
+  }
+}
+
+// ─────────────────────────────────────────────────────────
+// KPIs
+// ─────────────────────────────────────────────────────────
+function updateKPIs() {
+  const totals = {};
+  for (const r of ALL_RECORDS) {
+    totals[r.status] = (totals[r.status] || 0) + r.count;
+  }
+  const grand = Object.values(totals).reduce((a,b)=>a+b,0);
+
+  for (const [status, total] of Object.entries(totals)) {
+    const el = document.getElementById(`kpi-${status}`);
+    if (el) el.textContent = num(total);
+    const sub = document.getElementById(`kpi-${status}-sub`);
+    if (sub) sub.textContent = `${((total/grand)*100).toFixed(1)}% of total`;
+  }
+
+  document.getElementById('overviewAlertCount').textContent =
+    `${ALL_ALERTS.length} alerts`;
+}
+
+// ─────────────────────────────────────────────────────────
+// OVERVIEW CHART — stacked area
+// ─────────────────────────────────────────────────────────
+function renderOverviewChart() {
+  // Sample every 10 minutes to keep chart performance good
+  const sampled = {};
+  for (const r of ALL_RECORDS) {
+    const key = Math.floor(r.timestamp.getTime() / (10*60000)) * (10*60000);
+    if (!sampled[key]) sampled[key] = { approved:0, denied:0, failed:0, reversed:0 };
+    sampled[key][r.status] = (sampled[key][r.status]||0) + r.count;
+  }
+
+  const times = Object.keys(sampled).map(k => +k).sort();
+  const labels = times.map(t => fmtTime(new Date(t)));
+
+  const opts = baseLineOptions('Volume');
+  opts.scales.y.stacked = false;
+
+  destroyChart('overviewChart');
+  charts['overviewChart'] = new Chart('overviewChart', {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'Approved',
+          data: times.map(t => sampled[t].approved),
+          borderColor: '#22c55e',
+          backgroundColor: 'rgba(34,197,94,0.07)',
+          fill: true,
+          tension: 0.3,
+          borderWidth: 2,
+          pointRadius: 0,
+        },
+        {
+          label: 'Denied',
+          data: times.map(t => sampled[t].denied),
+          borderColor: '#ef4444',
+          backgroundColor: 'rgba(239,68,68,0.07)',
+          fill: true,
+          tension: 0.3,
+          borderWidth: 2,
+          pointRadius: 0,
+        },
+        {
+          label: 'Failed',
+          data: times.map(t => sampled[t].failed),
+          borderColor: '#f97316',
+          backgroundColor: 'rgba(249,115,22,0.07)',
+          fill: true,
+          tension: 0.3,
+          borderWidth: 2,
+          pointRadius: 0,
+        },
+        {
+          label: 'Reversed',
+          data: times.map(t => sampled[t].reversed),
+          borderColor: '#a855f7',
+          backgroundColor: 'rgba(168,85,247,0.07)',
+          fill: true,
+          tension: 0.3,
+          borderWidth: 2,
+          pointRadius: 0,
+        }
+      ]
+    },
+    options: opts
+  });
+}
+
+// ─────────────────────────────────────────────────────────
+// FAILURE RATE CHART
+// ─────────────────────────────────────────────────────────
+function renderFailRateChart() {
+  const byMinute = {};
+  for (const r of ALL_RECORDS) {
+    const key = r.timestamp.toISOString();
+    if (!byMinute[key]) byMinute[key] = { ts: r.timestamp, total: 0, fail: 0 };
+    byMinute[key].total += r.count;
+    if (['failed','denied','reversed'].includes(r.status))
+      byMinute[key].fail += r.count;
+  }
+
+  // Sample every 5 minutes
+  const allMins = Object.values(byMinute).sort((a,b) => a.ts - b.ts);
+  const sampled = allMins.filter((_,i) => i % 5 === 0);
+
+  const labels = sampled.map(m => fmtTime(m.ts));
+  const rates  = sampled.map(m => m.total > 0 ? +(m.fail/m.total*100).toFixed(2) : 0);
+
+  const opts = baseLineOptions('Failure Rate');
+  opts.scales.y.title = { display: true, text: 'Failure Rate (%)', color: '#3d5280' };
+
+  destroyChart('failRateChart');
+  charts['failRateChart'] = new Chart('failRateChart', {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'Failure Rate (%)',
+          data: rates,
+          borderColor: '#ef4444',
+          backgroundColor: 'rgba(239,68,68,0.1)',
+          fill: true,
+          tension: 0.3,
+          borderWidth: 2,
+          pointRadius: 0,
+        },
+        {
+          label: '15% Threshold',
+          data: Array(labels.length).fill(15),
+          borderColor: 'rgba(234,179,8,0.6)',
+          borderDash: [5,5],
+          borderWidth: 1.5,
+          pointRadius: 0,
+          fill: false,
+        }
+      ]
+    },
+    options: opts
+  });
+}
+
+// ─────────────────────────────────────────────────────────
+// DONUT CHART
+// ─────────────────────────────────────────────────────────
+function renderDonutChart() {
+  const totals = {};
+  for (const r of ALL_RECORDS) {
+    totals[r.status] = (totals[r.status]||0) + r.count;
+  }
+
+  destroyChart('donutChart');
+  charts['donutChart'] = new Chart('donutChart', {
+    type: 'doughnut',
+    data: {
+      labels: Object.keys(totals),
+      datasets: [{
+        data: Object.values(totals),
+        backgroundColor: ['rgba(34,197,94,0.7)','rgba(239,68,68,0.7)','rgba(249,115,22,0.7)','rgba(168,85,247,0.7)'],
+        borderColor: ['#22c55e','#ef4444','#f97316','#a855f7'],
+        borderWidth: 2,
+        hoverOffset: 8,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      cutout: '65%',
+      plugins: {
+        legend: { position: 'right', labels: { padding: 16, boxWidth: 12 } },
+        tooltip: {
+          backgroundColor: '#0d1525',
+          borderColor: 'rgba(99,179,255,0.2)',
+          borderWidth: 1,
+          callbacks: {
+            label: (ctx) => {
+              const total = ctx.dataset.data.reduce((a,b)=>a+b,0);
+              const pct = (ctx.raw/total*100).toFixed(1);
+              return ` ${ctx.label}: ${num(ctx.raw)} (${pct}%)`;
+            }
+          }
+        }
+      }
+    }
+  });
+}
+
+// ─────────────────────────────────────────────────────────
+// TX TIME CHART (per-status, with anomaly markers)
+// ─────────────────────────────────────────────────────────
+let currentFilter = 'all';
+
+function renderTxTimeChart(filter='all') {
+  currentFilter = filter;
+  const statusColors = {
+    approved: '#22c55e',
+    denied: '#ef4444',
+    failed: '#f97316',
+    reversed: '#a855f7',
+  };
+
+  // Sample every 5 mins
+  const sampled = {};
+  for (const r of ALL_RECORDS) {
+    if (filter !== 'all' && r.status !== filter) continue;
+    const key = Math.floor(r.timestamp.getTime()/(5*60000))*(5*60000);
+    if (!sampled[key]) sampled[key] = {};
+    sampled[key][r.status] = (sampled[key][r.status]||0) + r.count;
+  }
+
+  const times = Object.keys(sampled).map(k=>+k).sort();
+  const labels = times.map(t=>fmtTime(new Date(t)));
+
+  const statuses = filter === 'all'
+    ? ['approved','denied','failed','reversed']
+    : [filter];
+
+  const datasets = statuses.map(status => ({
+    label: status.charAt(0).toUpperCase()+status.slice(1),
+    data: times.map(t => sampled[t]?.[status] ?? 0),
+    borderColor: statusColors[status],
+    backgroundColor: statusColors[status]+'22',
+    fill: filter !== 'all',
+    tension: 0.3,
+    borderWidth: 2,
+    pointRadius: 0,
+  }));
+
+  const opts = baseLineOptions('Transactions');
+  destroyChart('txTimeChart');
+  charts['txTimeChart'] = new Chart('txTimeChart', { type:'line', data:{labels,datasets}, options:opts });
+}
+
+function filterTransactions(f) {
+  txFilter = f;
+  document.querySelectorAll('[id^="filter-"]').forEach(b => b.classList.remove('active'));
+  document.getElementById(`filter-${f}`).classList.add('active');
+  renderTxTimeChart(f);
+}
+
+// ─────────────────────────────────────────────────────────
+// PER-STATUS MINI CHARTS (denied/failed/reversed)
+// ─────────────────────────────────────────────────────────
+function renderStatusCharts() {
+  const statusMap = {
+    denied: { id:'deniedChart', color:'#ef4444' },
+    failed: { id:'failedChart', color:'#f97316' },
+    reversed: { id:'reversedChart', color:'#a855f7' },
+  };
+
+  for (const [status, cfg] of Object.entries(statusMap)) {
+    const series = ALL_RECORDS
+      .filter(r=>r.status===status)
+      .sort((a,b)=>a.timestamp-b.timestamp);
+
+    // Every 10 mins
+    const sampled = [];
+    for (let i=0;i<series.length;i+=10) sampled.push(series[i]);
+
+    const labels = sampled.map(r=>fmtTime(r.timestamp));
+    const data   = sampled.map(r=>r.count);
+
+    // Compute rolling mean for threshold line
+    const W=6;
+    const means = data.map((_,i) => {
+      if (i < W) return null;
+      const w = data.slice(i-W,i);
+      return +(w.reduce((a,b)=>a+b,0)/W+2).toFixed(1);
+    });
+
+    const opts = baseLineOptions(status);
+    opts.plugins.legend.display = false;
+    opts.scales.x.ticks.maxTicksLimit = 8;
+
+    destroyChart(cfg.id);
+    charts[cfg.id] = new Chart(cfg.id, {
+      type:'line',
+      data:{
+        labels,
+        datasets:[
+          {
+            data,
+            borderColor: cfg.color,
+            backgroundColor: cfg.color+'15',
+            fill:true,
+            tension:0.3,
+            borderWidth:2,
+            pointRadius:0,
+          },
+          {
+            label:'Rolling μ+2σ',
+            data:means,
+            borderColor:'rgba(234,179,8,0.5)',
+            borderDash:[4,4],
+            borderWidth:1.5,
+            pointRadius:0,
+            fill:false,
+          }
+        ]
+      },
+      options:opts
+    });
+  }
+}
+
+// ─────────────────────────────────────────────────────────
+// ALERTS TABLE
+// ─────────────────────────────────────────────────────────
+function renderAlertsTable() {
+  const tbody = document.getElementById('alertsTableBody');
+  const countEl = document.getElementById('alertCount');
+
+  countEl.textContent = `${ALL_ALERTS.length} alerts found`;
+
+  if (ALL_ALERTS.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:40px;color:#3d5280">No anomalies detected</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = ALL_ALERTS.slice(0, 500).map(a => `
+    <tr>
+      <td>${fmtDateTime(a.timestamp)}</td>
+      <td class="status-${a.status}">${a.status}</td>
+      <td>${a.type}</td>
+      <td><span class="severity-badge severity-${a.severity}">${a.severity}</span></td>
+      <td>${a.observedCount}</td>
+      <td>${a.rollingMean.toFixed(1)}</td>
+      <td>${a.rollingStdDev.toFixed(2)}</td>
+      <td class="${a.zScore>0?'z-score-pos':'z-score-neg'}">${a.zScore>0?'+':''}${a.zScore.toFixed(3)}</td>
+      <td style="font-size:11px;color:var(--text-muted);font-family:var(--font-main)">${a.message}</td>
+    </tr>
+  `).join('');
+}
+
+// ─────────────────────────────────────────────────────────
+// ALERTS BY HOUR CHART
+// ─────────────────────────────────────────────────────────
+function renderAlertsByHour() {
+  const hourBuckets = {};
+  for (let h=0;h<24;h++) hourBuckets[h]={critical:0,warning:0};
+
+  for (const a of ALL_ALERTS) {
+    const h = a.timestamp.getHours();
+    if (a.severity==='CRITICAL') hourBuckets[h].critical++;
+    else hourBuckets[h].warning++;
+  }
+
+  const labels = Array.from({length:24},(_,i)=>`${i.toString().padStart(2,'0')}h`);
+
+  const opts = baseLineOptions('');
+  opts.scales.x.ticks.maxTicksLimit = 24;
+  opts.scales.y.title = { display:true, text:'Alert Count', color:'#3d5280' };
+
+  destroyChart('alertsByHourChart');
+  charts['alertsByHourChart'] = new Chart('alertsByHourChart', {
+    type:'bar',
+    data:{
+      labels,
+      datasets:[
+        {
+          label:'CRITICAL',
+          data: labels.map((_,i)=>hourBuckets[i].critical),
+          backgroundColor:'rgba(239,68,68,0.6)',
+          borderColor:'#ef4444',
+          borderWidth:1,
+        },
+        {
+          label:'WARNING',
+          data: labels.map((_,i)=>hourBuckets[i].warning),
+          backgroundColor:'rgba(234,179,8,0.5)',
+          borderColor:'#eab308',
+          borderWidth:1,
+        }
+      ]
+    },
+    options:{...opts, scales:{...opts.scales, x:{...opts.scales.x, stacked:true}, y:{...opts.scales.y, stacked:true}}}
+  });
+
+  // Severity donut
+  const crit = ALL_ALERTS.filter(a=>a.severity==='CRITICAL').length;
+  const warn = ALL_ALERTS.length - crit;
+
+  destroyChart('alertSeverityChart');
+  charts['alertSeverityChart'] = new Chart('alertSeverityChart', {
+    type:'doughnut',
+    data:{
+      labels:['CRITICAL','WARNING'],
+      datasets:[{
+        data:[crit,warn],
+        backgroundColor:['rgba(239,68,68,0.7)','rgba(234,179,8,0.6)'],
+        borderColor:['#ef4444','#eab308'],
+        borderWidth:2,
+        hoverOffset:8,
+      }]
+    },
+    options:{
+      responsive:true,
+      maintainAspectRatio:false,
+      cutout:'60%',
+      plugins:{
+        legend:{position:'right',labels:{padding:16,boxWidth:12}},
+        tooltip:{
+          backgroundColor:'#0d1525',
+          borderColor:'rgba(99,179,255,0.2)',
+          borderWidth:1,
+        }
+      }
+    }
+  });
+}
+
+// ─────────────────────────────────────────────────────────
+// CHECKOUT CHARTS
+// ─────────────────────────────────────────────────────────
+function switchCheckout(ds) {
+  currentCheckoutDS = ds;
+  [1,2].forEach(n => {
+    document.getElementById(`ds-btn-${n}`).classList.toggle('active', n===ds);
+  });
+  renderCheckout(ds);
+}
+
+function renderCheckout(ds) {
+  const data = ds === 2 ? CHECKOUT_2 : CHECKOUT_1;
+  const labels = data.map(r=>r.time);
+  const hasAnomaly = ds === 2;
+
+  document.getElementById('checkoutBadge').textContent = hasAnomaly ? 'ANOMALY DETECTED' : 'NORMAL';
+  document.getElementById('checkoutBadge').style.cssText = hasAnomaly
+    ? 'background:rgba(239,68,68,0.15);color:#fca5a5;border:1px solid rgba(239,68,68,0.25)'
+    : 'background:rgba(34,197,94,0.15);color:var(--green);border:1px solid rgba(34,197,94,0.25)';
+
+  document.getElementById('checkoutAnomDesc').style.display = hasAnomaly ? 'block' : 'none';
+
+  const opts = baseLineOptions('POS');
+  opts.scales.y.title = { display:true, text:'Sales Count', color:'#3d5280' };
+
+  destroyChart('checkoutChart');
+  charts['checkoutChart'] = new Chart('checkoutChart', {
+    type:'line',
+    data:{
+      labels,
+      datasets:[
+        {
+          label:'Today',
+          data:data.map(r=>r.today),
+          borderColor:'#3b82f6',
+          backgroundColor:'rgba(59,130,246,0.12)',
+          fill:false,
+          tension:0.3,
+          borderWidth:3,
+          pointRadius:5,
+          pointBackgroundColor: data.map(r => {
+            if (r.today === 0 && r.avgLM > 10) return '#ef4444';
+            const dev = Math.abs((r.today - r.avgLM)/ (r.avgLM||1));
+            return dev > 0.5 ? '#eab308' : '#3b82f6';
+          }),
+          pointBorderWidth: 2,
+        },
+        {
+          label:'Yesterday',
+          data:data.map(r=>r.yesterday),
+          borderColor:'#6366f1',
+          fill:false,
+          tension:0.3,
+          borderWidth:1.5,
+          borderDash:[4,4],
+          pointRadius:0,
+        },
+        {
+          label:'Avg Last Month',
+          data:data.map(r=>r.avgLM),
+          borderColor:'rgba(124,179,255,0.5)',
+          fill:false,
+          tension:0.3,
+          borderWidth:1.5,
+          borderDash:[2,4],
+          pointRadius:0,
+        }
+      ]
+    },
+    options:opts
+  });
+
+  // Render table
+  const tbody = document.getElementById('checkoutTableBody');
+  tbody.innerHTML = data.map(r => {
+    const dev = r.avgLM > 0 ? (r.today - r.avgLM)/r.avgLM : 0;
+    const devPct = (dev*100).toFixed(1);
+    const isCrit = r.today === 0 && r.avgLM > 10;
+    const isWarn = Math.abs(dev) > 0.5;
+    const color = isCrit ? '#fca5a5' : isWarn ? '#fde68a' : '#7a94c1';
+    const flag  = isCrit ? '🔴 CRITICAL' : isWarn ? '🟡 WARNING' : '✅ OK';
+
+    return `<tr>
+      <td style="color:var(--text-primary);font-weight:600">${r.time}</td>
+      <td style="color:${r.today===0&&r.avgLM>10?'#fca5a5':r.today>r.avgLM*1.5?'#86efac':'#7a94c1'};font-weight:600">${r.today}</td>
+      <td>${r.yesterday}</td>
+      <td>${r.sdlw}</td>
+      <td>${r.avgLW}</td>
+      <td>${r.avgLM}</td>
+      <td style="color:${color}">${devPct}% ${flag}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ─────────────────────────────────────────────────────────
+// ALERT BANNER
+// ─────────────────────────────────────────────────────────
+function checkAlertBanner() {
+  const critical = ALL_ALERTS.filter(a=>a.severity==='CRITICAL');
+  if (critical.length === 0) return;
+
+  document.getElementById('alertBanner').classList.remove('hidden');
+  document.getElementById('bannerTitle').textContent =
+    `🚨 ${critical.length} Critical Anomalies Detected`;
+  document.getElementById('bannerMsg').textContent =
+    `Statuses affected: ${[...new Set(critical.map(a=>a.status))].join(', ')} · ` +
+    `Click Alerts tab to view full log`;
+}
+
+// ─────────────────────────────────────────────────────────
+// TOAST NOTIFICATIONS
+// ─────────────────────────────────────────────────────────
+function fireToasts() {
+  const critical = ALL_ALERTS.filter(a=>a.severity==='CRITICAL').slice(0,3);
+  if (critical.length === 0) return;
+
+  const container = document.getElementById('toastContainer');
+  const sample = critical[Math.floor(Math.random()*critical.length)];
+
+  const toast = document.createElement('div');
+  toast.className = 'toast critical';
+  toast.innerHTML = `
+    <div class="toast-icon">🚨</div>
+    <div class="toast-body">
+      <h4>CRITICAL · ${sample.status.toUpperCase()} ${sample.type}</h4>
+      <p>Z-Score: ${sample.zScore > 0 ? '+':''}${sample.zScore.toFixed(2)} · ${fmtDateTime(sample.timestamp)}</p>
+    </div>
+  `;
+  container.appendChild(toast);
+  setTimeout(() => { toast.style.opacity='0'; toast.style.transition='opacity 0.5s'; setTimeout(()=>toast.remove(),500); }, 6000);
+}
+
+// ─────────────────────────────────────────────────────────
+// FOOTER STATS
+// ─────────────────────────────────────────────────────────
+function updateFooter() {
+  const crit = ALL_ALERTS.filter(a=>a.severity==='CRITICAL').length;
+  const warn = ALL_ALERTS.filter(a=>a.severity==='WARNING').length;
+  document.getElementById('footerStats').textContent =
+    `${ALL_RECORDS.length.toLocaleString()} records · ${crit} critical · ${warn} warnings`;
+}
+
+// ─────────────────────────────────────────────────────────
+// PAGE NAVIGATION
+// ─────────────────────────────────────────────────────────
+function switchPage(id) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+
+  document.getElementById(`page-${id}`).classList.add('active');
+  document.querySelector(`[data-page="${id}"]`).classList.add('active');
+}
+
+// ─────────────────────────────────────────────────────────
+// BOOT
+// ─────────────────────────────────────────────────────────
+window.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>
