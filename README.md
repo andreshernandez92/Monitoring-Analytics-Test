@@ -36,7 +36,7 @@ This document serves as the comprehensive final submission for the Proctor Compa
 
 ## 1. Executive Summary
 
-This repository contains a **complete transaction monitoring and anomaly detection system** built for the CloudWalk Monitoring Intelligence Analyst technical assessment. The solution implements:
+This repository contains a **complete transaction monitoring and anomaly detection system** built for the Proctor Monitoring Intelligence Analyst technical assessment. The solution implements:
 
 - **Data analysis** of POS checkout data (`checkout_1.csv`, `checkout_2.csv`) revealing a 3-hour complete POS outage (15h–17h) with pre-outage degradation signals at 14h
 - **Real-time anomaly detection** on minute-level transaction data (`transactions.csv`, 25,920 rows) using a hybrid **Rolling Z-Score + Rule-Based** engine
@@ -868,7 +868,7 @@ private static readonly Dictionary<string, int> WindowOverrides = new()
 
 ### Improvement 9: PromQL Equivalents
 
-**Problem:** The assessment mentions CloudWalk uses "SQL, PromQL, Ruby and Python." PromQL was never mentioned in the original submission.
+**Problem:** The assessment mentions Proctor uses "SQL, PromQL, Ruby and Python." PromQL was never mentioned in the original submission.
 
 **Why it matters:** PromQL (Prometheus Query Language) is the industry standard for metrics-based monitoring in cloud-native environments. Demonstrating the ability to translate Z-Score logic into PromQL shows production tool literacy.
 
@@ -1052,7 +1052,7 @@ ORDER BY time;
 
 ## 12. PromQL Equivalents for Cloud-Native Deployment
 
-CloudWalk uses Prometheus for metrics collection. Below are the PromQL equivalents of our detection rules:
+Proctor uses Prometheus for metrics collection. Below are the PromQL equivalents of our detection rules:
 
 ### Failure Rate Alert
 
@@ -1186,7 +1186,7 @@ curl -X POST http://localhost:5050/api/analyze \
 
 ## 14. Production Readiness Roadmap
 
-The current implementation is a working prototype suitable for the assessment. In a production deployment at CloudWalk's scale, the following enhancements would be applied:
+The current implementation is a working prototype suitable for the assessment. In a production deployment at Proctor's scale, the following enhancements would be applied:
 
 ### Data Layer
 
@@ -1386,4 +1386,4 @@ The core insight driving this system is simple: **normal looks like noise; anoma
 
 *Built with C# ASP.NET Core 8 + Vanilla JavaScript + Chart.js*  
 *Rolling Z-Score Hybrid Anomaly Detection Engine*  
-*For CloudWalk Monitoring Intelligence Analyst Assessment*
+*For Proctor Monitoring Intelligence Analyst Assessment*
